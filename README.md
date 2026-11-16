@@ -11,7 +11,7 @@ The author platform includes the editorial homepage, dispatch and works archives
 - A narrowly scoped `postcss-selector-parser` override applies the patched 6.1.5 release to the typography plugin.
 - Locally served Cormorant Garamond, Source Serif 4 and JetBrains Mono fonts.
 - Pages CMS, editing Markdown and media directly in GitHub.
-- Python 3.12+, Requests, PyYAML and Pillow; GitHub Actions every six hours.
+- Python 3.12+, Requests, PyYAML and Pillow; GitHub Actions hourly.
 
 The brief permits Astro 5+. An initial Astro 5.18.2 build passed, but its dependency audit reported security advisories. The delivered package uses a patched current release instead of claiming that an affected Astro 5 dependency is production-ready. Do not downgrade it without a new dependency review.
 
@@ -36,7 +36,7 @@ npm run dev
 
 On Windows PowerShell, create the environment with `py -3 -m venv .venv`, then run `.venv\Scripts\Activate.ps1`. Use `python` instead of `python3` for the direct CLI commands. The npm convenience aliases use `python3`; the direct commands work on Windows too.
 
-The book overview and press kit are public in the launch build. The five demonstration entries remain drafts, so the public dispatch, works, chapter and event lists start empty. Enable the local draft preview to read the sample entries.
+The book overview and press kit are public in the launch build. The five demonstration entries remain drafts. The public dispatch archive contains the imported Instagram posts. Enable the local draft preview to read the sample entries.
 
 ## Local draft preview and production publishing
 
@@ -112,26 +112,24 @@ The CMS requires a unique positive dispatch number for a new manually written di
 
 ## Instagram sync contract
 
-The supported integration is **Instagram API with Instagram Login** for a professional Creator or Business account. It uses `graph.instagram.com`, `instagram_business_basic` permission and a versioned API. It does not scrape Instagram and does not use the retired Basic Display API. No Facebook Page is required for this login variant.
-
-Configure the repository secrets `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_USER_ID`. Add the optional `DEPLOY_WEBHOOK_URL` secret to request a host build after a successful import push. See the [setup and deployment guide](docs/SETUP_AND_DEPLOYMENT.md) for the dashboard steps. Optional repository variables are:
+**Behold JSON feed** is the default source. The bundled feed is for `@yushayaizaz`. To change it, set the `BEHOLD_FEED_URL` process environment variable locally or the same **repository variable** in GitHub Actions. The scheduled and manual workflow runs use Behold without Meta secrets.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `INSTAGRAM_API_VERSION` | `v27.0` | Pin a supported version for your Meta app. |
+| `BEHOLD_FEED_URL` | Bundled author feed | Override with another HTTPS feed from `feeds.behold.so`. |
 | `INSTAGRAM_IMPORT_DRAFT` | `false` | Set to `true` to review new imports before publishing. |
-| `SITE_URL` | unset | Actual HTTPS origin; optional for local builds. |
+| `SITE_URL` | unset | Actual HTTPS origin for canonical URLs. |
 
-`.env.example` is a reference for the required environment values. Python scripts intentionally read the process environment; they do not load `.env` automatically. Do not commit a real token. The workflow injects GitHub secrets automatically. For local use, set the values in your terminal environment and run:
+To use Instagram Login locally instead, supply `INSTAGRAM_ACCESS_TOKEN` and the numeric `INSTAGRAM_USER_ID` in your process environment. `INSTAGRAM_API_VERSION` defaults to `v27.0` for that mode. The importer reads only the process environment.
 
 ```bash
 python scripts/sync_instagram.py --dry-run
 python scripts/sync_instagram.py
 ```
 
-`--dry-run` reads the media inventory and counts would-be imports without writing files or downloading media. It is not an image-availability test.
+`--dry-run` counts would-be imports without writing files or downloading media. A normal run numbers new posts from oldest to newest. Use `--feature-latest` to feature the newest entry in that run while preserving existing featured entries.
 
-The default branch workflow runs at **00:17, 06:17, 12:17 and 18:17 UTC**, plus manual dispatch. All media pages and carousel child pages are fetched. The default bound is 200 pages for each edge; reaching it fails explicitly rather than silently truncating the archive. Increase `--max-pages` for an unusually large account.
+GitHub Actions checks the feed hourly at minute 0 UTC, plus manual runs. On successful import pushes it dispatches the GitHub Pages workflow. Behold Free updates its source once a day and includes 1,200 feed views per month. Hourly scheduled checks use up to 744 views in a 31-day month, with extra usage from manual requests and retries. [Behold pricing and limits](https://behold.so/pricing/)
 
 ### Preservation guarantees
 
@@ -139,8 +137,8 @@ The default branch workflow runs at **00:17, 06:17, 12:17 and 18:17 UTC**, plus 
 2. Import IDs are checked against frontmatter, ID-bearing filenames, permalinks and `data/instagram-imports.json`. Renaming or deleting an imported article does not make it new again.
 3. Do not delete the ledger when removing an imported article. Its retained ID is a tombstone. To intentionally reimport, remove the matching ledger record and the matching Markdown after taking your own backup. The importer never performs that action for you.
 4. All images are downloaded and decoded/verified before the article is created. A missing child image, missing video poster, invalid image, oversize asset or network failure prevents a partial article from being published.
-5. Single images and every carousel child image are persisted locally. Videos and video children use locally saved poster thumbnails, with the original video available through the Instagram link. This is an image-based journal, not a video archive.
-6. Captions are imported as literal text with preserved line breaks; HTML and Markdown control characters are escaped. Hashtags generate editable tags; the first meaningful line generates an editable title. No AI service or paid model is used.
+5. Single images, carousel covers, and every carousel child image are persisted locally. A cover that is also a slide uses that slide’s local copy. Videos and video children use locally saved poster thumbnails, with the original video available through the Instagram link. This is an image-based journal, not a video archive.
+6. Behold imports use the pruned caption and editable hashtag tags. Caption copy preserves literal text and line breaks; HTML and Markdown control characters are escaped. Hashtags generate editable tags; the first meaningful line generates an editable title. No AI service or paid model is used.
 7. Empty image descriptions are deliberately honest. The importer does not invent visual descriptions from captions; add accessible descriptions in the CMS. The future reader must handle empty alt text without using filenames as descriptions.
 8. Files are published using an exclusive atomic link. A local OS lock serializes CLI/import writes, and GitHub Actions concurrency serializes scheduled jobs.
 9. If an editor pushes while import is running, a non-fast-forward push fails. The disposable runner discards its candidate commit, checks out the current branch, and reruns the import up to three times. There is no force push and no automatic rebase over editorial changes.
@@ -155,11 +153,11 @@ The architecture has no mandatory paid dependency, but “$0/month forever” is
 - Pages CMS currently offers a free hosted app and open-source software.
 - Standard GitHub Actions runners are free for public repositories. Private repositories have included quotas; exceeding them is not an unlimited free service. Public Git history also exposes draft source. Use a private repository if unpublished work must remain private, monitor its included minutes, and disable paid overages.
 - Public repository schedules may be disabled after 60 days without repository activity. Cron runs can be delayed or dropped. The manual workflow remains the recovery path; this is not an exact-time scheduler.
-- Refresh the long-lived Instagram token before it expires and replace the GitHub secret with the returned token. The [refresh instructions](docs/SETUP_AND_DEPLOYMENT.md#refresh-the-token-before-it-expires) include the command and timing.
+- If you use the optional local Instagram Login mode, [refresh its long-lived token](docs/SETUP_AND_DEPLOYMENT.md#refresh-the-token-before-it-expires) before expiry.
 - Cloudflare Pages Free offers a provider subdomain within its free limits. Vercel Hobby limits use to personal, non-commercial projects. See the [hosting options](docs/SETUP_AND_DEPLOYMENT.md#step-4--host-the-site-and-request-builds-after-bot-commits).
 - Branch rules must permit the bot's direct content commits for this workflow. A protected branch that rejects them will fail safely rather than bypass protection.
 - Bot commits made with `GITHUB_TOKEN` do not trigger other push-based GitHub Actions. The sync job validates each candidate commit before pushing. The optional deploy hook requests a host build after a successful push. Check the hosting dashboard for completion.
-- Nothing has been connected to a live Meta account, GitHub repository, Pages CMS account or hosting project by generating these files. No credentials were requested or embedded. API behavior is covered by mocked regression tests; live authorization remains to be verified during setup.
+- The production platform is published through GitHub Pages. The bundled Behold feed can be replaced through the repository variable without changing the code.
 
 ## Delivery phases
 

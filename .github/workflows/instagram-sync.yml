@@ -2,7 +2,7 @@ name: Import Instagram dispatches
 
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +21,7 @@ jobs:
       pushed: ${{ steps.sync_content.outputs.pushed }}
     env:
       BRANCH: ${{ github.event.repository.default_branch }}
-      INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v27.0' }}
+      BEHOLD_FEED_URL: ${{ vars.BEHOLD_FEED_URL }}
       INSTAGRAM_IMPORT_DRAFT: ${{ vars.INSTAGRAM_IMPORT_DRAFT || 'false' }}
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
@@ -42,9 +42,6 @@ jobs:
           cache: npm
       - name: Import, validate and publish a conflict-free commit
         id: sync_content
-        env:
-          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
         shell: bash
         run: |
           set -euo pipefail

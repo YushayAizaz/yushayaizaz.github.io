@@ -81,6 +81,15 @@ try {
   await copySource(root, fixture);
   // A physical copy keeps Astro's compiled component paths inside the fixture root.
   await cp(join(root, 'node_modules'), join(fixture, 'node_modules'), { recursive: true, mode: constants.COPYFILE_FICLONE });
+  // CMS edits and Instagram imports are production data. Build isolated content here.
+  for (const collection of ['dispatches', 'works', 'book', 'events']) {
+    const directory = join(fixture, 'src/content', collection);
+    for (const name of await readdir(directory)) {
+      if (!/^2026-11-14-sample-.*\.md$/.test(name)) {
+        await rm(join(directory, name), { recursive: true, force: true });
+      }
+    }
+  }
   const dispatchDir = join(fixture, 'src/content/dispatches');
   await writeFile(join(dispatchDir, 'private-draft.md'), frontmatter({
     title: 'PRIVATE-DRAFT-SENTINEL', tags: ['PRIVATE-DRAFT-TAG'], dispatchNumber: 900, date: '2026-11-15', source: 'website', draft: true,
@@ -96,7 +105,11 @@ try {
   // Ensure the empty run covers the fallback even if the author has added a portrait locally.
   const portrait = join(fixture, 'public/images/uploads/yushay-aizaz-portrait.jpg');
   const launchOverview = join(fixture, 'src/content/book/overview.md');
-  // Retain the launch overview in the first build, then replace it only in the disposable fixtures.
+  await writeFile(launchOverview, frontmatter({
+    title: 'A book in progress', date: '2026-11-16', kind: 'overview',
+    synopsis: 'The published overview for the first fixture build.',
+    status: 'gathering-stories', progress: 0, draft: false,
+  }, 'The full book overview for the first fixture build.'));
   await rm(portrait, { force: true });
   await writeFile(join(fixture, '.env'), 'INCLUDE_DRAFTS=true\n');
   const empty = await build();
@@ -105,8 +118,8 @@ try {
   assert.ok(empty.includes('A quiet page. An open invitation.'));
   assert.ok(empty.includes('No dispatches have been published yet.'));
   assert.ok(empty.includes('Some words ask for a little longer.'));
-  assert.match(empty, /His evening interviews are a starting point/);
-  assert.match(await route('/book/'), /I began the evening interviews/);
+  assert.match(empty, /The published overview for the first fixture build./);
+  assert.match(await route('/book/'), /The full book overview for the first fixture build./);
   for (const [path, message] of [
     ['/dispatches/', 'No dispatches yet'], ['/works/', 'No original works yet'], ['/book/', 'No excerpts yet'], ['/achievements/', 'No upcoming gatherings'],
   ]) {

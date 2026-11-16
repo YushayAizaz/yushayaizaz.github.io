@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Import new Instagram posts only; preserve every existing editorial byte.
 
-Uses Instagram API with Instagram Login, not the retired Basic Display API.
+Uses the Behold JSON feed by default and Instagram Login when a token is set.
 Credentials are read only from environment variables. Never log request URLs,
 response bodies, access tokens, or captions. Images are staged and verified before
 any Markdown is created. An import ledger preserves deletion/rename decisions.
@@ -30,6 +30,7 @@ from content_utils import (
     markdown, parse_date, repository_lock, slugify, utc_now,
 )
 
+DEFAULT_BEHOLD_FEED_URL = 'https://feeds.behold.so/t2udoVzt2j9EYGUvZ8k7'
 MAX_BYTES = 30 * 1024 * 1024
 Image.MAX_IMAGE_PIXELS = 50_000_000
 FORMATS = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp', 'GIF': '.gif', 'AVIF': '.avif'}
@@ -127,6 +128,101 @@ class InstagramClient:
         return list(self.paginate(f'{identifier(post_id)}/children', 'id,media_type,media_url,thumbnail_url', max_pages))
 
 
+def behold_plate(item: dict) -> dict:
+    media_type = item.get('mediaType')
+    sizes = item.get('sizes')
+    sizes = sizes if isinstance(sizes, dict) else {}
+    optimized = None
+    for size in ('large', 'full', 'medium', 'small'):
+        image = sizes.get(size)
+        if isinstance(image, dict) and isinstance(image.get('mediaUrl'), str) and image['mediaUrl']:
+            optimized = image['mediaUrl']
+            break
+    return {
+        'id': identifier(item.get('id')),
+        'media_type': media_type,
+        'media_url': optimized or item.get('mediaUrl'),
+        # Behold generates an image variant for videos, including carousel videos.
+        'thumbnail_url': optimized or item.get('thumbnailUrl'),
+    }
+
+
+def same_image_source(left: object, right: object) -> bool:
+    if not isinstance(left, str) or not isinstance(right, str) or not left or not right:
+        return False
+    try:
+        a, b = urlsplit(left), urlsplit(right)
+        return bool(a.path) and (a.scheme, a.netloc, a.path) == (b.scheme, b.netloc, b.path)
+    except ValueError:
+        return False
+
+
+class BeholdClient:
+    def __init__(self, feed_url: str):
+        try:
+            parts = urlsplit(feed_url)
+            trusted = parts.scheme == 'https' and parts.netloc.lower() in ('feeds.behold.so', 'feeds.behold.so:443')
+        except ValueError:
+            trusted = False
+        if not trusted or not re.fullmatch(r'/[a-zA-Z0-9_-]+/?', parts.path) or parts.fragment:
+            raise SyncError('BEHOLD_FEED_URL must be an HTTPS JSON feed at feeds.behold.so.')
+        self.feed_url = feed_url
+        self.session = requests.Session()
+        self.session.headers.update({'Accept': 'application/json', 'User-Agent': 'YushayJournalSync/1.0'})
+        self.posts: dict[str, dict] = {}
+
+    def close(self):
+        self.session.close()
+
+    def media(self, _max_pages: int):
+        with request(self.session, self.feed_url) as response:
+            if response.status_code != 200:
+                raise SyncError(f'Behold feed request failed (HTTP {response.status_code}).')
+            try:
+                payload = response.json()
+            except ValueError:
+                raise SyncError('Behold returned invalid JSON.') from None
+        items = payload.get('posts') if isinstance(payload, dict) else None
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise SyncError('Behold returned a malformed posts list.')
+        self.posts.clear()
+        for item in items:
+            post = behold_plate(item)
+            self.posts.setdefault(post['id'], item)
+            original = item.get('caption')
+            original = original if isinstance(original, str) else ''
+            caption = item.get('prunedCaption')
+            if not isinstance(caption, str):
+                caption = HASHTAG.sub('', original).rstrip(' ·|•\n\t')
+            tags = item.get('hashtags')
+            yield {
+                **post,
+                'caption': caption.strip(),
+                'hashtags': tags if isinstance(tags, list) else HASHTAG.findall(original),
+                'timestamp': item.get('timestamp'),
+                'permalink': item.get('permalink'),
+            }
+
+    def children(self, post_id: str, _max_pages: int):
+        post = self.posts[post_id]
+        children = post.get('children')
+        if not isinstance(children, list) or not children or any(not isinstance(item, dict) for item in children):
+            raise SyncError('Behold carousel has no valid children; refusing an incomplete import.')
+        plates = [behold_plate(item) for item in children]
+        # A carousel cover can share its source with a child despite a different signed query.
+        # Use that child's local copy. When the cover is distinct, keep it as a separate plate.
+        cover = behold_plate(post)
+        if not any(
+            child['media_type'] == 'IMAGE' and (
+                same_image_source(post.get('mediaUrl'), raw.get('mediaUrl'))
+                or same_image_source(cover['media_url'], child['media_url'])
+            )
+            for raw, child in zip(children, plates)
+        ):
+            plates.insert(0, {**cover, 'media_type': 'IMAGE'})
+        return plates
+
+
 def validate_cdn_url(url: str) -> None:
     try:
         parts = urlsplit(url)
@@ -135,9 +231,9 @@ def validate_cdn_url(url: str) -> None:
     except (ValueError, TypeError):
         raise SyncError('Invalid image URL.') from None
     allowed = any(host == domain or host.endswith('.' + domain)
-                  for domain in ('cdninstagram.com', 'fbcdn.net', 'instagram.com'))
+                  for domain in ('cdninstagram.com', 'fbcdn.net', 'instagram.com', 'behold.pictures'))
     if parts.scheme != 'https' or not allowed or port not in (None, 443) or parts.username or parts.password:
-        raise SyncError('Image URL is not an approved HTTPS Instagram CDN host.')
+        raise SyncError('Image URL is not an approved HTTPS Instagram or Behold CDN host.')
 
 
 class ImageDownloader:
@@ -226,12 +322,18 @@ def read_ledger(root: Path) -> dict:
     return value
 
 
-def import_post(root: Path, post: dict, number: int, client, downloader, max_pages: int, draft: bool) -> Path | None:
+def import_post(root: Path, post: dict, number: int, client, downloader, max_pages: int, draft: bool, *, featured: bool = False) -> Path | None:
     post_id = identifier(post.get('id'))
     caption = post.get('caption') or ''
     if not isinstance(caption, str):
         raise SyncError('Invalid caption type.')
     title, excerpt, tags = caption_metadata(caption, post_id)
+    feed_tags = post.get('hashtags')
+    if isinstance(feed_tags, list):
+        tags = list(dict.fromkeys(
+            value.strip().lstrip('#').strip().casefold()[:64] for value in feed_tags
+            if isinstance(value, str) and value.strip().lstrip('#').strip()
+        ))[:40]
     timestamp = parse_date(post.get('timestamp', ''))
     permalink = post.get('permalink', '')
     if not isinstance(permalink, str) or not re.fullmatch(r'https://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+/?', permalink):
@@ -285,14 +387,14 @@ def import_post(root: Path, post: dict, number: int, client, downloader, max_pag
             'source': 'instagram', 'instagramId': post_id, 'instagramUrl': permalink,
             'images': local_paths, 'imageAlts': [''] * len(local_paths),
             'captionExcerpt': excerpt, 'location': '', 'tags': tags,
-            'featured': False, 'draft': draft, 'lockedForManualEdits': True,
+            'featured': featured, 'draft': draft, 'lockedForManualEdits': True,
         }
         if not exclusive_write(path, markdown(data, plain_caption_markdown(caption)).encode('utf-8')):
             return None
     return path
 
 
-def sync(root: Path, client, downloader, *, max_pages=200, draft=False, dry_run=False) -> dict:
+def sync(root: Path, client, downloader, *, max_pages=200, draft=False, dry_run=False, feature_latest=False) -> dict:
     ids, urls, highest = dispatch_inventory(root)
     ledger = read_ledger(root)
     before = json.dumps(ledger, sort_keys=True)
@@ -303,6 +405,7 @@ def sync(root: Path, client, downloader, *, max_pages=200, draft=False, dry_run=
     records.sort(key=lambda item: (parse_date(item.get('timestamp', '')), identifier(item.get('id'))))
     imported = skipped = planned = 0
     seen = set()
+    pending = []
     for post in records:
         post_id = identifier(post.get('id'))
         if post_id in seen:
@@ -314,10 +417,14 @@ def sync(root: Path, client, downloader, *, max_pages=200, draft=False, dry_run=
             if permalink in urls:
                 ledger['posts'].setdefault(post_id, {'path': urls[permalink].relative_to(root).as_posix()})
             continue
+        pending.append(post)
+    for index, post in enumerate(pending):
         if dry_run:
             planned += 1
             continue
-        path = import_post(root, post, highest + 1, client, downloader, max_pages, draft)
+        post_id = identifier(post.get('id'))
+        path = import_post(root, post, highest + 1, client, downloader, max_pages, draft,
+                           featured=feature_latest and index == len(pending) - 1)
         if path is None:
             skipped += 1
             continue
@@ -335,6 +442,7 @@ def main() -> int:
     cli.add_argument('--root', type=Path, default=ROOT)
     cli.add_argument('--max-pages', type=int, default=200)
     cli.add_argument('--dry-run', action='store_true', help='Read-only inventory; do not download images or write files.')
+    cli.add_argument('--feature-latest', action='store_true', help='Feature only the newest new dispatch without changing existing entries.')
     args = cli.parse_args()
     client = downloader = None
     try:
@@ -343,13 +451,18 @@ def main() -> int:
         draft_value = os.getenv('INSTAGRAM_IMPORT_DRAFT', 'false').lower()
         if draft_value not in ('true', 'false'):
             raise ContentError('INSTAGRAM_IMPORT_DRAFT must be true or false.')
-        client = InstagramClient(os.getenv('INSTAGRAM_ACCESS_TOKEN', ''), os.getenv('INSTAGRAM_USER_ID', ''),
-                                 os.getenv('INSTAGRAM_API_VERSION', 'v27.0'))
+        token = os.environ.get('INSTAGRAM_ACCESS_TOKEN', '').strip()
+        if token:
+            client = InstagramClient(token, os.environ.get('INSTAGRAM_USER_ID', ''),
+                                     os.environ.get('INSTAGRAM_API_VERSION', 'v27.0'))
+        else:
+            feed_url = os.environ.get('BEHOLD_FEED_URL', '').strip() or DEFAULT_BEHOLD_FEED_URL
+            client = BeholdClient(feed_url)
         downloader = ImageDownloader()
         context = nullcontext() if args.dry_run else repository_lock(args.root.resolve())
         with context:
             summary = sync(args.root.resolve(), client, downloader, max_pages=args.max_pages,
-                           draft=draft_value == 'true', dry_run=args.dry_run)
+                           draft=draft_value == 'true', dry_run=args.dry_run, feature_latest=args.feature_latest)
         print(json.dumps(summary, sort_keys=True))
         return 0
     except (SyncError, ContentError) as exc:

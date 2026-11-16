@@ -23,13 +23,19 @@ You need Git, Node 24 LTS, Python 3.12 or newer, and access to the GitHub and Me
 
 4. Refresh the GitHub repository and confirm that `main` contains `src/`, `public/`, and the workflows. In **Settings → Actions → General**, ensure your account permits the repository's workflows and that branch rules allow the import workflow to push to the default branch. Its job explicitly requests `contents: write`. Use GitHub **Billing and licensing → Budgets and alerts** to check your included Actions usage and set any spending limit to stop billed overages. The included allowance is shared with your other repositories. [GitHub push guide](https://docs.github.com/en/migrations/importing-source-code/using-the-command-line-to-import-source-code/adding-locally-hosted-code-to-github) · [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
 
-## Step 2 — Authorize the Instagram Creator account
+## Step 2 — Connect Instagram imports
 
-### Create the Meta app and generate an Instagram user token
+### Production: Behold JSON feed
+
+The live repository uses the bundled `@yushayaizaz` Behold JSON feed. Neither `INSTAGRAM_ACCESS_TOKEN` nor `INSTAGRAM_USER_ID` is required. To point it at another Behold feed, set `BEHOLD_FEED_URL` under **Settings → Secrets and variables → Actions → Variables**. Set the same variable in your shell to override it locally.
+
+Run **Actions → Import Instagram dispatches → Run workflow** for a manual check. Scheduled runs check every hour at minute 0 UTC. Behold Free refreshes the feed once a day. A run with no new posts makes no commit, and a successful push of new entries triggers the Pages deployment. Keep an eye on [Behold’s monthly view limit](https://behold.so/pricing/).
+
+### Optional local use: Meta app with Instagram Login
 
 1. On Instagram, confirm `@yushayaizaz` is a **public professional Creator** account. If switching from a personal account, open the profile menu, go to **Settings and activity → Account type and tools → Switch to professional account**, and select **Creator** when asked to choose the account type.
 2. Sign in at [Meta for Developers → My Apps](https://developers.facebook.com/apps/). Complete developer registration if prompted. Click **Create App**. Supply an app name, such as `Yushay Editorial Import`, and your contact email when prompted. If your app wizard lists **Manage messaging and content on Instagram**, choose it and complete the wizard. If it shows the product-based setup, choose **Other → Next → Business → Next**, complete the app details and business selection shown, then select **Create app**. In the resulting dashboard, under **Add products to your app**, find **Instagram → Set up**. [Meta Instagram app setup](https://developers.facebook.com/docs/instagram-platform/create-an-instagram-app/)
-3. Open **Instagram → API setup with Instagram login**. In the use-case dashboard, you may reach this under **Use cases → Manage messaging and content on Instagram → Customize**. Use the Instagram Login version. It works with a professional account without a linked Facebook Page. The importer reads media and requires `instagram_business_basic`. It polls every six hours, so the website needs no Meta webhook, callback server, or public OAuth sign-in. [Meta Instagram Login permissions](https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login)
+3. Open **Instagram → API setup with Instagram login**. In the use-case dashboard, you may reach this under **Use cases → Manage messaging and content on Instagram → Customize**. Use the Instagram Login version. It works with a professional account without a linked Facebook Page. The importer reads media and requires `instagram_business_basic`. Local imports use polling. The website itself does not need a Meta webhook, callback server, or public OAuth sign-in. [Meta Instagram Login permissions](https://www.postman.com/meta/instagram/folder/1z5vxzu/instagram-api-with-instagram-login)
 4. In **Generate access tokens**, click **Add account**, sign in as `@yushayaizaz`, and approve access. If Meta requires a tester invitation first, go to **App roles → Roles → Add People → Instagram Tester**, enter `yushayaizaz`, and send the invitation. On Instagram as that account, open [Apps and websites → Tester invites](https://www.instagram.com/accounts/manage_access/) and accept it. Return to the app dashboard and retry **Add account**. This setup is for the account you own or manage and add to the app under Standard Access. Accessing other creators' accounts requires a different review and authorization flow. [Meta access levels](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login/)
 5. Next to the account in **Generate access tokens**, click **Generate token** and confirm the prompt. Copy the Instagram user access token into a private password manager. Copy the numeric **Instagram account/user ID** on the same account row. Use that ID as `INSTAGRAM_USER_ID`. The Instagram app ID, Facebook Page ID and handle are different identifiers.
 
@@ -58,21 +64,19 @@ printf '\n'
 unset ig_token
 ```
 
-### Store the credentials and run the first import
+### Run the importer locally with a Meta token
 
-1. In GitHub, open the repository. Go to **Settings → Secrets and variables → Actions → Secrets → New repository secret**. Add `INSTAGRAM_ACCESS_TOKEN` with the long-lived token. Repeat for `INSTAGRAM_USER_ID` with the numeric value. Paste values without quotes and save. [GitHub repository secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)
-2. Under **Variables → New repository variable**, optionally set `INSTAGRAM_IMPORT_DRAFT` to `true` if you want to review newly imported articles before publishing. Without that flag, fresh imports are published. The importer can bring in the accessible back catalogue on its first run. Using draft mode keeps article pages out of the static site, but files in `public/`, including imported photos, are still public after a build. Optionally set `INSTAGRAM_API_VERSION` to the supported version shown for your app when it differs from the bundled default `v27.0`.
-3. To test the credential pair without creating files, install the Python dependencies with `python -m pip install -r requirements.txt`, then run this locally from the repository root. If a repo variable differs from the bundled API version, set the same version in your terminal before testing.
+Store the access token in a private password manager. Set these environment variables only if using the optional local Graph API mode. Install the Python dependencies with `python -m pip install -r requirements.txt` and run the following from the repository root.
 
-   ```bash
-   read -r -s -p 'Long-lived Instagram user token: ' INSTAGRAM_ACCESS_TOKEN; printf '\n'
-   read -r -p 'Numeric Instagram user ID: ' INSTAGRAM_USER_ID
-   export INSTAGRAM_ACCESS_TOKEN INSTAGRAM_USER_ID
-   python scripts/sync_instagram.py --dry-run
-   unset INSTAGRAM_ACCESS_TOKEN INSTAGRAM_USER_ID
-   ```
+```bash
+read -r -s -p 'Long-lived Instagram user token: ' INSTAGRAM_ACCESS_TOKEN; printf '\n'
+read -r -p 'Numeric Instagram user ID: ' INSTAGRAM_USER_ID
+export INSTAGRAM_ACCESS_TOKEN INSTAGRAM_USER_ID
+python scripts/sync_instagram.py --dry-run
+unset INSTAGRAM_ACCESS_TOKEN INSTAGRAM_USER_ID
+```
 
-4. If you want the first automated import to exercise hosting too, set up Step 4 before the first scheduled or manual run. To start manually, open **Actions → Import Instagram dispatches → Run workflow**, select the default branch and click **Run workflow**. Check the run summary and the default branch for the new content commit. A successful run with no new posts makes no commit. The normal schedule is 00:17, 06:17, 12:17 and 18:17 UTC, subject to GitHub's scheduling.
+A run with no token uses Behold. To hold new posts for editorial review, set the repository variable `INSTAGRAM_IMPORT_DRAFT` to `true`. This keeps the articles out of the published edition, but their assets in `public/` are still included in a static deployment.
 
 ### Refresh the token before it expires
 
@@ -88,7 +92,7 @@ printf '\n'
 unset ig_token
 ```
 
-Replace `INSTAGRAM_ACCESS_TOKEN` in **Settings → Secrets and variables → Actions → Secrets** with the returned `access_token`. Update your private copy and record the new expiry from `expires_in`. The numeric ID stays the same for the same account and app. Run the dry-run check or a manual workflow run after updating. If a token already expired or was revoked, repeat **Generate token** and store a fresh one. GitHub does not display an existing secret's value, so keep the private copy current. [Meta refresh requirements](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login/#long-lived)
+Use the returned `access_token` for future local runs. Update your private copy and record the new expiry from `expires_in`. The numeric ID stays the same for the same account and app. Run the dry-run check after updating. If a token already expired or was revoked, repeat **Generate token** and store a fresh one. [Meta refresh requirements](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login/#long-lived)
 
 ## Step 3 — Edit through Pages CMS
 
@@ -137,7 +141,7 @@ The imported content is pushed with GitHub's `GITHUB_TOKEN`. That push does not 
 - Open `/`, `/dispatches/`, `/works/`, `/book/`, and `/achievements/#press-kit` on the deployed origin. Check that neither the private working-edition banner nor the demonstration drafts appear.
 - Use one of the public press-kit copy buttons on HTTPS and paste the result into a local text editor. When a portrait is present, test the download. The contact link opens `@yushayaizaz` on Instagram, where visitors can select **Message**.
 - Make a small approved edit in Pages CMS. Confirm the branch receives the commit and the host deploys it. If the host blocks or queues a build, look at the provider log and its free plan usage rather than repeatedly pressing deploy.
-- Check the most recent Actions run periodically and renew the Instagram token before its due date. The first successful Meta import and the first live deploy require your account credentials and are verified in your dashboards.
+- Check the most recent Actions run and Behold usage periodically. Renew the Meta token before expiry only if you use the optional local Instagram Login mode.
 
 ## GitHub Pages root launch
 
