@@ -1,0 +1,8 @@
+---
+interface Props { eyebrow: string; title: string; text: string; compact?: boolean; }
+const { eyebrow, title, text, compact = false } = Astro.props;
+---
+<div class:list={['editorial-empty', { compact }]}>
+  <span class="empty-asterisk" aria-hidden="true">✳</span>
+  <div><p class="eyebrow">{eyebrow}</p><h3>{title}</h3><p>{text}</p></div>
+</div>

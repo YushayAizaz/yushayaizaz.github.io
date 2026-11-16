@@ -1,0 +1,98 @@
+---
+import EditorialLayout from '../layouts/EditorialLayout.astro';
+import ArchiveFilter from '../components/ArchiveFilter.astro';
+import EmptyState from '../components/EmptyState.astro';
+import Arrow from '../components/Arrow.astro';
+import LedgerEntry from '../components/LedgerEntry.astro';
+import PressBio from '../components/PressBio.astro';
+import { editorialContent } from '../lib/content';
+import { archiveEventType, eventTypes, splitEventLedger } from '../lib/events';
+import { portraitFilename, pressBios, pressTopics } from '../lib/press';
+import { hasAuthorPortrait, portraitPath } from '../lib/portrait';
+import { author } from '../lib/site';
+import '../styles/achievements.css';
+
+const { events, includesDrafts } = await editorialContent();
+const { upcoming, archive } = splitEventLedger(events, new Date());
+const options = Object.entries(eventTypes).map(([key, label]) => ({ key, label }));
+const hasPortrait = hasAuthorPortrait();
+---
+<EditorialLayout title="Literary Ledger & Press Kit — Yushay Aizaz" description="Readings, writing milestones, and press materials for Yushay Aizaz, writer based in Budapest." draftPreview={includesDrafts}>
+  <div class="page-width archive-page">
+    <header class="archive-intro ledger-intro">
+      <p class="eyebrow">Readings and recognition</p>
+      <h1>The Literary Ledger</h1>
+      <p>Gatherings, appearances, and milestones from the writing life.</p>
+      <a class="text-link" href="#press-kit">Writer press &amp; speaker kit <Arrow direction="down-right" /></a>
+    </header>
+
+    <section class="ledger-list-section" id="upcoming" aria-labelledby="upcoming-title">
+      <h2 id="upcoming-title">Upcoming Gatherings</h2>
+      {upcoming.length > 0 ? (
+        <div data-upcoming-list>{upcoming.map((entry) => <LedgerEntry entry={entry} upcoming />)}</div>
+      ) : (
+        <EmptyState eyebrow="The calendar" title="No upcoming gatherings" text="New readings and conversations will appear here when dates are confirmed." compact />
+      )}
+    </section>
+
+    <section class="ledger-list-section" id="recognition" aria-labelledby="recognition-title">
+      <h2 id="recognition-title">Recognition &amp; Appearances</h2>
+      {archive.length > 0 ? (
+        <ArchiveFilter filterName="type" filterLabel="Filter by type" options={options} allLabel="All entries" itemLabel="entry" pluralLabel="entries">
+          <div data-recognition-list>
+            {archive.map((entry) => (
+              <div data-archive-item data-filters={JSON.stringify([archiveEventType(entry.data.type)])}>
+                <LedgerEntry entry={entry} />
+              </div>
+            ))}
+          </div>
+        </ArchiveFilter>
+      ) : (
+        <EmptyState eyebrow="The archive" title="No archive entries yet" text="Past gatherings, publications, awards, and writing milestones will be recorded here." compact />
+      )}
+    </section>
+
+    <section id="press-kit" class="press-kit" aria-labelledby="press-kit-title">
+      <header class="press-kit-heading">
+        <p class="eyebrow">Yushay Aizaz · Budapest</p>
+        <h2 id="press-kit-title">Writer Press &amp; Speaker Kit</h2>
+      </header>
+
+      <div class="press-kit-grid">
+        <div class="press-bios" aria-label="Third-person biographies">
+          {pressBios.map((bio) => <PressBio {...bio} />)}
+        </div>
+        <aside class="press-portrait" aria-label="Author portrait">
+          {hasPortrait ? (
+            <figure>
+              <img src={portraitPath} alt="Portrait of Yushay Aizaz" loading="lazy" decoding="async" />
+              <figcaption><a class="text-link" href={portraitPath} download={portraitFilename}>Download press portrait <Arrow /></a></figcaption>
+            </figure>
+          ) : (
+            <div class="press-monogram" data-portrait-slot>
+              <span aria-hidden="true">Y A</span>
+              <p class="eyebrow">Press Portrait Slot</p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <div class="press-topics">
+        <h3>Reading, Panel &amp; Conversation Topics</h3>
+        <ul>
+          {pressTopics.map(({ title, description }) => (
+            <li><h4>{title}</h4><p>{description}</p></li>
+          ))}
+        </ul>
+      </div>
+
+      <div class="press-inquiries">
+        <div>
+          <h3>Inquiries &amp; Invitations</h3>
+          <p>For readings, literary events, interviews, and collaborations.</p>
+        </div>
+        <a class="editorial-button" href={author.instagram}>Contact {author.handle} on Instagram <Arrow /></a>
+      </div>
+    </section>
+  </div>
+</EditorialLayout>

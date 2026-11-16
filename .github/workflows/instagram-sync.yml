@@ -1,0 +1,115 @@
+name: Import Instagram dispatches
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instagram-editorial-import
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      pushed: ${{ steps.sync_content.outputs.pushed }}
+    env:
+      BRANCH: ${{ github.event.repository.default_branch }}
+      INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION || 'v27.0' }}
+      INSTAGRAM_IMPORT_DRAFT: ${{ vars.INSTAGRAM_IMPORT_DRAFT || 'false' }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Import, validate and publish a conflict-free commit
+        id: sync_content
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python -m pip install --disable-pip-version-check -r requirements.txt
+          for attempt in 1 2 3; do
+            # This reset applies only to the disposable runner checkout.
+            # Re-import on the latest branch instead of rebasing over CMS edits.
+            git fetch origin "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+            python scripts/sync_instagram.py
+            git add -- src/content/dispatches public/images/dispatches data/instagram-imports.json
+            if git diff --cached --quiet; then
+              echo 'No new dispatches to commit.'
+              exit 0
+            fi
+            python scripts/validate_content.py
+            npm ci --no-fund
+            npm run build
+            git commit -m 'content: import new Instagram dispatches'
+            if git push origin "HEAD:refs/heads/$BRANCH"; then
+              echo 'pushed=true' >> "$GITHUB_OUTPUT"
+              echo 'New dispatches committed; all existing articles preserved.'
+              exit 0
+            fi
+            echo "Push did not succeed (attempt $attempt); retrying from the current branch."
+          done
+          echo 'No push succeeded. Check branch permissions or concurrent edits.' >&2
+          exit 1
+      - name: Request a deployment for the pushed import
+        if: steps.sync_content.outputs.pushed == 'true' && github.event.repository.name != format('{0}.github.io', github.repository_owner)
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEPLOY_WEBHOOK_URL:-}" ]]; then
+            echo 'No deploy hook configured. The import has been pushed.'
+            exit 0
+          fi
+          if [[ "$DEPLOY_WEBHOOK_URL" != https://* ]]; then
+            echo 'The deploy hook must use HTTPS.' >&2
+            exit 1
+          fi
+          if ! code="$(curl -q --proto '=https' --silent --output /dev/null --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 30 -X POST "$DEPLOY_WEBHOOK_URL")"; then
+            echo 'The deploy hook could not be reached. The import commit is already pushed.' >&2
+            exit 1
+          fi
+          if [[ "$code" != 2[0-9][0-9] ]]; then
+            echo "The deploy hook returned HTTP $code. The import commit is already pushed." >&2
+            exit 1
+          fi
+          echo 'Deployment requested. Check the hosting dashboard for build status.'
+
+  dispatch_pages:
+    needs: sync
+    if: needs.sync.outputs.pushed == 'true' && github.event.repository.name == format('{0}.github.io', github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch the Pages workflow on the newly pushed branch
+        run: gh workflow run deploy-pages.yml --repo "$GITHUB_REPOSITORY" --ref main

@@ -1,0 +1,406 @@
+# Pages CMS: https://app.pagescms.org
+media:
+- name: editorial
+  label: Editorial images
+  input: public/images
+  output: /images
+  categories:
+  - image
+  rename: safe
+  extensions:
+  - jpg
+  - jpeg
+  - png
+  - webp
+  - avif
+  - gif
+content:
+- name: dispatches
+  label: The Evening Dispatches
+  type: collection
+  path: src/content/dispatches
+  format: yaml-frontmatter
+  filename:
+    template: '{year}-{month}-{day}-{primary}.md'
+    field: create
+  view:
+    primary: title
+    fields:
+    - title
+    - date
+    - draft
+    sort: date
+    order: desc
+  fields:
+  - name: title
+    label: Title
+    type: string
+    required: true
+  - name: date
+    label: Date
+    type: date
+    required: true
+    options:
+      format: yyyy-MM-dd
+  - name: draft
+    label: Draft
+    type: boolean
+    default: true
+    description: Drafts are excluded from the public site. GitHub repository access
+      still reveals their source.
+  - name: dispatchNumber
+    label: Dispatch number
+    type: number
+    required: true
+    options:
+      min: 1
+    description: Use the next unused number, including drafts. The CLI and importer
+      allocate this automatically; the CMS requires an explicit unique number.
+  - name: source
+    label: Source
+    type: select
+    required: true
+    options:
+      values:
+      - website
+      - instagram
+    default: website
+    readonly: true
+  - name: instagramId
+    label: Instagram id
+    type: string
+    readonly: true
+    description: Stable import identity. Do not remove it from imported Markdown.
+  - name: instagramUrl
+    label: Instagram permalink
+    type: string
+    readonly: true
+  - name: images
+    label: Images
+    type: image
+    list: true
+    options:
+      media: editorial
+      extensions:
+      - jpg
+      - jpeg
+      - png
+      - webp
+      - avif
+      - gif
+  - name: imageAlts
+    label: Image descriptions
+    type: string
+    list: true
+    description: One description per image in the same order. An empty list is also
+      valid.
+  - name: captionExcerpt
+    label: Archive excerpt
+    type: text
+    default: ''
+    description: Maximum 360 characters.
+  - name: location
+    label: Location
+    type: string
+    default: ''
+  - name: tags
+    label: Tags
+    type: string
+    list: true
+  - name: featured
+    label: Featured
+    type: boolean
+    default: false
+  - name: lockedForManualEdits
+    label: Preserve manual edits
+    type: boolean
+    default: true
+    readonly: true
+    description: The importer never edits existing Markdown, regardless of this flag.
+      Edit title, tags and body freely.
+  - name: body
+    label: Body
+    type: rich-text
+    options:
+      format: markdown
+      media: editorial
+    description: Write visually or switch to Markdown source. For poetry, use soft
+      line breaks within a stanza and a blank paragraph between stanzas.
+- name: works
+  label: Original Works
+  type: collection
+  path: src/content/works
+  format: yaml-frontmatter
+  filename:
+    template: '{year}-{month}-{day}-{primary}.md'
+    field: create
+  view:
+    primary: title
+    fields:
+    - title
+    - date
+    - draft
+    sort: date
+    order: desc
+  fields:
+  - name: title
+    label: Title
+    type: string
+    required: true
+  - name: date
+    label: Date
+    type: date
+    required: true
+    options:
+      format: yyyy-MM-dd
+  - name: draft
+    label: Draft
+    type: boolean
+    default: true
+    description: Drafts are excluded from the public site. GitHub repository access
+      still reveals their source.
+  - name: subtitle
+    label: Subtitle
+    type: string
+  - name: category
+    label: Category
+    type: select
+    required: true
+    options:
+      values:
+      - essay
+      - poetry
+      - short-story
+      - reflection
+    default: essay
+  - name: readingTime
+    label: Reading time (minutes)
+    type: number
+    required: true
+    options:
+      min: 1
+    default: 1
+  - name: featured
+    label: Featured
+    type: boolean
+    default: false
+  - name: coverImage
+    label: Cover image
+    type: image
+    options:
+      media: editorial
+      extensions:
+      - jpg
+      - jpeg
+      - png
+      - webp
+      - avif
+      - gif
+  - name: coverAlt
+    label: Cover description
+    type: string
+  - name: body
+    label: Body
+    type: rich-text
+    options:
+      format: markdown
+      media: editorial
+    description: Write visually or switch to Markdown source. For poetry, use soft
+      line breaks within a stanza and a blank paragraph between stanzas.
+- name: book
+  label: The Book · Overview & Excerpts
+  type: collection
+  path: src/content/book
+  format: yaml-frontmatter
+  filename:
+    template: '{year}-{month}-{day}-{primary}.md'
+    field: create
+  view:
+    primary: title
+    fields:
+    - title
+    - date
+    - draft
+    sort: date
+    order: desc
+  fields:
+  - name: title
+    label: Title
+    type: string
+    required: true
+  - name: date
+    label: Date
+    type: date
+    required: true
+    options:
+      format: yyyy-MM-dd
+  - name: draft
+    label: Draft
+    type: boolean
+    default: true
+    description: Drafts are excluded from the public site. GitHub repository access
+      still reveals their source.
+  - name: subtitle
+    label: Subtitle
+    type: string
+  - name: kind
+    label: Kind
+    type: select
+    required: true
+    options:
+      values:
+      - overview
+      - excerpt
+    default: excerpt
+  - name: synopsis
+    label: Synopsis
+    type: text
+    required: true
+  - name: status
+    label: Status
+    type: select
+    required: true
+    options:
+      values:
+      - gathering-stories
+      - drafting
+      - revising
+      - seeking-publication
+      - published
+    default: gathering-stories
+  - name: progress
+    label: Progress
+    type: number
+    required: true
+    default: 0
+    options:
+      min: 0
+      max: 100
+  - name: thematicPillars
+    label: Thematic pillars
+    type: string
+    list: true
+  - name: order
+    label: Order
+    type: number
+    required: true
+    options:
+      min: 0
+    default: 0
+  - name: chapterNumber
+    label: Chapter number
+    type: number
+    options:
+      min: 1
+    description: Required for excerpts; leave empty for the overview. Publish only
+      one overview.
+  - name: coverImage
+    label: Cover image
+    type: image
+    options:
+      media: editorial
+      extensions:
+      - jpg
+      - jpeg
+      - png
+      - webp
+      - avif
+      - gif
+  - name: coverAlt
+    label: Cover description
+    type: string
+  - name: body
+    label: Body
+    type: rich-text
+    options:
+      format: markdown
+      media: editorial
+    description: Write visually or switch to Markdown source. For poetry, use soft
+      line breaks within a stanza and a blank paragraph between stanzas.
+- name: events
+  label: Events & Recognition
+  type: collection
+  path: src/content/events
+  format: yaml-frontmatter
+  filename:
+    template: '{year}-{month}-{day}-{primary}.md'
+    field: create
+  view:
+    primary: title
+    fields:
+    - title
+    - date
+    - draft
+    sort: date
+    order: desc
+  fields:
+  - name: title
+    label: Title
+    type: string
+    required: true
+  - name: date
+    label: Date
+    type: date
+    required: true
+    options:
+      format: yyyy-MM-dd
+  - name: draft
+    label: Draft
+    type: boolean
+    default: true
+    description: Drafts are excluded from the public site. GitHub repository access
+      still reveals their source.
+  - name: type
+    label: Type
+    type: select
+    required: true
+    options:
+      values:
+      - upcoming-event
+      - past-event
+      - award
+      - publication
+      - milestone
+    default: upcoming-event
+  - name: location
+    label: Location
+    type: string
+    default: ''
+  - name: organization
+    label: Organization
+    type: string
+    default: ''
+  - name: description
+    label: Description
+    type: text
+    required: true
+  - name: externalUrl
+    label: Externalurl
+    type: string
+    description: Optional HTTPS URL.
+  - name: photos
+    label: Photos
+    type: image
+    list: true
+    options:
+      media: editorial
+      extensions:
+      - jpg
+      - jpeg
+      - png
+      - webp
+      - avif
+      - gif
+  - name: photoAlts
+    label: Photo descriptions
+    type: string
+    list: true
+    description: One description per photo, in the same order.
+  - name: body
+    label: Body
+    type: rich-text
+    options:
+      format: markdown
+      media: editorial
+    description: Write visually or switch to Markdown source. For poetry, use soft
+      line breaks within a stanza and a blank paragraph between stanzas.

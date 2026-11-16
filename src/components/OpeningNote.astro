@@ -1,0 +1,12 @@
+---
+import Arrow from './Arrow.astro';
+interface Props { text: string; instagramUrl?: string; }
+const { text, instagramUrl } = Astro.props;
+---
+{(text || instagramUrl) && <details class="opening-note">
+  <summary>Read the opening <span aria-hidden="true"><Arrow direction="up-right" /></span></summary>
+  <div class="opening-content">
+    {text && <p>{text}</p>}
+    {instagramUrl && <a class="text-link" href={instagramUrl}>Visit the original dispatch on Instagram <Arrow direction="up-right" /></a>}
+  </div>
+</details>}

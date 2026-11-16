@@ -1,0 +1,42 @@
+---
+import Arrow from './Arrow.astro';
+import ThemeToggle from './ThemeToggle.astro';
+import { author, navigation } from '../lib/site';
+---
+<header class="masthead page-width">
+  <div class="masthead-overline">
+    <span>A journal of human connection</span>
+    <span data-edition-name>Warm Literary Press</span>
+  </div>
+  <div class="masthead-main">
+    <a class="wordmark" href="/" aria-label="Yushay Aizaz — home">Yushay Aizaz<span class="wordmark-period">.</span></a>
+    <nav class="desktop-nav" aria-label="Main navigation">
+      {navigation.map((link) => <a href={link.href} aria-current={Astro.url.pathname === link.href ? "page" : undefined}>{link.label}</a>)}
+    </nav>
+    <div class="masthead-actions">
+      <ThemeToggle />
+      <details class="mobile-menu" data-mobile-menu>
+        <summary><span>Menu</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 8h16M4 16h16" /></svg></summary>
+        <nav aria-label="Mobile navigation">
+          {navigation.map((link) => <a href={link.href} aria-current={Astro.url.pathname === link.href ? "page" : undefined}>{link.label}</a>)}
+          <a href={author.instagram}>Instagram <Arrow direction="up-right" /></a>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>
+<script>
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    const menu = document.querySelector<HTMLDetailsElement>('[data-mobile-menu]');
+    if (menu && (!menu.contains(event.target) || event.target.closest('a'))) menu.open = false;
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const menu = document.querySelector<HTMLDetailsElement>('[data-mobile-menu][open]');
+    if (menu) {
+      menu.open = false;
+      menu.querySelector('summary')?.focus();
+    }
+  });
+</script>

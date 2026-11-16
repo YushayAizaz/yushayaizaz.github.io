@@ -1,0 +1,88 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import EditorialLayout from '../../layouts/EditorialLayout.astro';
+import Arrow from '../../components/Arrow.astro';
+import PhotoCarousel from '../../components/PhotoCarousel.astro';
+import { editorialContent } from '../../lib/content';
+import { formatDate, plainExcerpt, readingMinutes } from '../../lib/content-policy';
+import { dispatchNumberLabel, dispatchTagHref, entryHref } from '../../lib/reading';
+
+export async function getStaticPaths() {
+  const { dispatches, includesDrafts } = await editorialContent();
+  return dispatches.map((entry, index) => ({
+    params: { slug: entry.id },
+    props: { entry, older: dispatches[index + 1], newer: dispatches[index - 1], includesDrafts },
+  }));
+}
+
+interface Props {
+  entry: CollectionEntry<'dispatches'>;
+  older?: CollectionEntry<'dispatches'>;
+  newer?: CollectionEntry<'dispatches'>;
+  includesDrafts: boolean;
+}
+
+const { entry, older, newer, includesDrafts } = Astro.props;
+const { data, body } = entry;
+const { Content } = await render(entry);
+const hasPhotos = data.images.length > 0;
+---
+<EditorialLayout title={`${data.title} — Yushay Aizaz`} description={data.captionExcerpt || plainExcerpt(body, 155) || undefined} draftPreview={includesDrafts}>
+  <div class="page-width reader-page">
+    <a class="reader-return" href="/dispatches/"><span aria-hidden="true">←</span> The Evening Dispatches</a>
+
+    <article class:list={['reader-article', hasPhotos ? 'dispatch-split' : 'essay-reader']} data-reader={hasPhotos ? 'photographic-dispatch' : 'text-dispatch'}>
+      <header class="reader-header">
+        <div class="reader-overline">
+          <p class="eyebrow">Dispatch {dispatchNumberLabel(data.dispatchNumber)}</p>
+          {data.draft && <span class="draft-badge">Draft</span>}
+        </div>
+        <h1>{data.title}</h1>
+        <div class="card-meta reader-meta">
+          <time datetime={data.date.toISOString()}>{formatDate(data.date)}</time>
+          <span aria-hidden="true">·</span><span>{readingMinutes(body)} min read</span>
+          {data.location && <><span aria-hidden="true">·</span><span>{data.location}</span></>}
+        </div>
+      </header>
+
+      {hasPhotos && (
+        <aside class="dispatch-plates lg:sticky lg:top-8" aria-label="Photographs from the dispatch">
+          <PhotoCarousel images={data.images} alts={data.imageAlts} />
+        </aside>
+      )}
+
+      <div class="reader-text">
+        <div class="literary-prose drop-cap"><Content /></div>
+        {(data.tags.length > 0 || data.instagramUrl) && (
+          <footer class="reader-notes">
+            {data.tags.length > 0 && (
+              <ul class="reader-tags" aria-label="Dispatch topics">
+                {data.tags.map((tag) => <li><a class="filter-pill" href={dispatchTagHref(tag)}>{tag}</a></li>)}
+              </ul>
+            )}
+            {data.instagramUrl && (
+              <a class="text-link" href={data.instagramUrl}>Original dispatch on Instagram <Arrow /></a>
+            )}
+          </footer>
+        )}
+      </div>
+    </article>
+
+    {(older || newer) && (
+      <nav class="dispatch-neighbors" aria-label="Adjacent dispatches">
+        {older && (
+          <a class="neighbor-older" rel="prev" href={entryHref('dispatches', older.id)}>
+            <span class="eyebrow">← Older · {dispatchNumberLabel(older.data.dispatchNumber)}</span>
+            <span>{older.data.title}</span>
+          </a>
+        )}
+        {newer && (
+          <a class="neighbor-newer" rel="next" href={entryHref('dispatches', newer.id)}>
+            <span class="eyebrow">Newer · {dispatchNumberLabel(newer.data.dispatchNumber)} →</span>
+            <span>{newer.data.title}</span>
+          </a>
+        )}
+      </nav>
+    )}
+  </div>
+</EditorialLayout>

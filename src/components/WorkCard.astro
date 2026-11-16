@@ -1,0 +1,21 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { formatDate, plainExcerpt } from '../lib/content-policy';
+import { entryHref, workCategories } from '../lib/reading';
+import Arrow from './Arrow.astro';
+interface Props { entry: CollectionEntry<'works'>; }
+const { entry } = Astro.props;
+const { data, body } = entry;
+const href = entryHref('works', entry.id);
+const excerpt = plainExcerpt(body, 240);
+---
+<article class:list={['work-card', { 'poetry-card': data.category === 'poetry' }]} data-card-kind="work" data-entry-id={entry.id}>
+  {data.coverImage && <figure class="work-figure"><img src={data.coverImage} alt={data.coverAlt ?? ''} width="1200" height="900" loading="lazy" decoding="async" /></figure>}
+  <div class="card-overline"><span class="eyebrow">{workCategories[data.category]}</span>{data.draft && <span class="draft-badge">Draft</span>}</div>
+  <h3><a class="card-title-link" href={href}>{data.title}</a></h3>
+  {data.subtitle && <p class="work-subtitle">{data.subtitle}</p>}
+  {excerpt && <p class="card-excerpt">{excerpt}</p>}
+  <div class="card-meta"><time datetime={data.date.toISOString()}>{formatDate(data.date)}</time><span aria-hidden="true">·</span><span>{data.readingTime} min read</span></div>
+  <a class="text-link card-read-link" href={href}>Read the work <Arrow /></a>
+  <p class="source-note">An original work · written for these pages.</p>
+</article>

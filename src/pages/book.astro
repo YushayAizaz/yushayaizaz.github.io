@@ -1,0 +1,88 @@
+---
+import { render } from 'astro:content';
+import EditorialLayout from '../layouts/EditorialLayout.astro';
+import EmptyState from '../components/EmptyState.astro';
+import { editorialContent } from '../lib/content';
+import { plainExcerpt } from '../lib/content-policy';
+import { chapterOrder } from '../lib/reading';
+import { bookStatuses } from '../lib/site';
+
+const { book, includesDrafts } = await editorialContent();
+const overview = book.find(({ data }) => data.kind === 'overview');
+const OverviewContent = overview ? (await render(overview)).Content : undefined;
+const excerpts = await Promise.all(chapterOrder(book.filter(({ data }) => data.kind === 'excerpt')).map(async (entry) => ({
+  entry,
+  anchor: `excerpt-${encodeURIComponent(entry.id)}`,
+  Content: (await render(entry)).Content,
+})));
+---
+<EditorialLayout title={`${overview?.data.title ?? 'The Book in Progress'} — Yushay Aizaz`} description={overview ? plainExcerpt(overview.data.synopsis, 155) : 'Yushay Aizaz’s book project about human connection and inner life.'} draftPreview={includesDrafts}>
+  <div class="page-width showroom-page">
+    <header class="archive-intro showroom-intro">
+      <p class="eyebrow">The book project</p>
+      <h1>{overview?.data.title ?? 'The Book in Progress'}</h1>
+      {overview?.data.subtitle && <p>{overview.data.subtitle}</p>}
+    </header>
+
+    {overview && OverviewContent ? (
+      <section id="overview" class="showroom-overview" aria-labelledby="overview-title">
+        <div class="showroom-context">
+          {overview.data.coverImage && (
+            <figure class="showroom-cover"><img src={overview.data.coverImage} alt={overview.data.coverAlt ?? ''} decoding="async" /></figure>
+          )}
+          <div class="reader-overline">
+            <span class="book-status">{bookStatuses[overview.data.status]}</span>
+            {overview.data.draft && <span class="draft-badge">Draft</span>}
+          </div>
+          <div class="book-progress showroom-progress">
+            <div><label for="showroom-progress">Manuscript progress</label><span>{overview.data.progress}%</span></div>
+            <progress id="showroom-progress" value={overview.data.progress} max="100">{overview.data.progress}%</progress>
+          </div>
+          {overview.data.thematicPillars.length > 0 && (
+            <div class="showroom-pillars">
+              <p class="eyebrow">Thematic pillars</p>
+              <ul>{overview.data.thematicPillars.map((pillar) => <li>{pillar}</li>)}</ul>
+            </div>
+          )}
+        </div>
+        <div class="showroom-copy">
+          <h2 id="overview-title">About the book</h2>
+          <p class="showroom-synopsis">{overview.data.synopsis}</p>
+          <div class="literary-prose drop-cap"><OverviewContent /></div>
+        </div>
+      </section>
+    ) : (
+      <p class="showroom-synopsis">A book about human connection and inner life. The project overview will appear here when it is ready.</p>
+    )}
+
+    <section id="excerpts" class="showroom-excerpts" aria-labelledby="excerpts-title">
+      <h2 id="excerpts-title">Chapter excerpts</h2>
+      {excerpts.length > 0 ? (
+        <>
+          <nav aria-label="Excerpts on this page" class="excerpt-contents">
+            <ol>{excerpts.map(({ entry, anchor }) => <li><a href={`#${encodeURIComponent(anchor)}`}><span class="eyebrow">Chapter {entry.data.chapterNumber}</span>{entry.data.title}</a></li>)}</ol>
+          </nav>
+          {excerpts.map(({ entry, anchor, Content }) => (
+            <article id={anchor} class="chapter-excerpt essay-reader">
+              <header>
+                <div class="reader-overline">
+                  <p class="eyebrow">Chapter {entry.data.chapterNumber}</p>
+                  {entry.data.draft && <span class="draft-badge">Draft</span>}
+                </div>
+                <h3>{entry.data.title}</h3>
+                {entry.data.subtitle && <p class="reader-deck">{entry.data.subtitle}</p>}
+                <p class="chapter-synopsis">{entry.data.synopsis}</p>
+              </header>
+              {entry.data.coverImage && (
+                <figure class="reader-cover"><img src={entry.data.coverImage} alt={entry.data.coverAlt ?? ''} loading="lazy" decoding="async" /></figure>
+              )}
+              <div class="literary-prose drop-cap"><Content /></div>
+            </article>
+          ))}
+        </>
+      ) : (
+        <EmptyState eyebrow="The manuscript" title="No excerpts yet" text="Selected passages will appear here when they are ready to share." compact />
+      )}
+    </section>
+  </div>
+</EditorialLayout>

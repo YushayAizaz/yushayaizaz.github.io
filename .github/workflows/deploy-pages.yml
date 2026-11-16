@@ -1,0 +1,47 @@
+name: Deploy author platform to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: author-platform-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event.repository.name == format('{0}.github.io', github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the deployment commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84bd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies and build the published edition
+        env:
+          SITE_URL: ${{ format('https://{0}.github.io', github.repository_owner) }}
+          ASTRO_TELEMETRY_DISABLED: '1'
+        run: npm ci --no-fund && npm run build
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - name: Publish the site
+        uses: actions/deploy-pages@v4
+        id: deployment

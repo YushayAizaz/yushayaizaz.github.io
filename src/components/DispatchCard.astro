@@ -1,0 +1,31 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { formatDate, mediaLabel, plainExcerpt, readingMinutes } from '../lib/content-policy';
+import { dispatchNumberLabel, entryHref } from '../lib/reading';
+import Arrow from './Arrow.astro';
+interface Props { entry: CollectionEntry<'dispatches'>; featured?: boolean; }
+const { entry, featured = false } = Astro.props;
+const { data, body } = entry;
+const hasImage = data.images.length > 0;
+const excerpt = data.captionExcerpt || plainExcerpt(body, 260);
+const href = entryHref('dispatches', entry.id);
+---
+<article class:list={['dispatch-card', { 'featured-dispatch': featured, 'has-image': hasImage, 'text-dispatch': !hasImage }]} data-card-kind="dispatch" data-entry-id={entry.id}>
+  {hasImage && <figure class="dispatch-figure">
+    <img src={data.images[0]} alt={data.imageAlts[0] ?? ''} width="1200" height="900" loading={featured ? 'eager' : 'lazy'} decoding="async" fetchpriority={featured ? 'high' : 'auto'} />
+    <figcaption class="plate-caption">{mediaLabel(data.images)}</figcaption>
+  </figure>}
+  <div class="dispatch-copy">
+    <div class="card-overline">
+      <span class="eyebrow">{dispatchNumberLabel(data.dispatchNumber)}</span>
+      {data.draft && <span class="draft-badge">Draft</span>}
+    </div>
+    {!hasImage && <p class="media-note">{mediaLabel(data.images)}</p>}
+    <h3><a class="card-title-link" href={href}>{data.title}</a></h3>
+    {excerpt && <p class="card-excerpt">{excerpt}</p>}
+    <div class="card-meta"><time datetime={data.date.toISOString()}>{formatDate(data.date)}</time><span aria-hidden="true">·</span><span>{readingMinutes(body)} min read</span>{data.location && <><span aria-hidden="true">·</span><span>{data.location}</span></>}</div>
+    {data.tags.length > 0 && <ul class="card-tags" aria-label="Topics">{data.tags.slice(0, 3).map((tag) => <li>{tag}</li>)}</ul>}
+    <a class="text-link card-read-link" href={href}>Read the dispatch <Arrow /></a>
+    {data.source === 'instagram' && <p class="source-note">First shared on Instagram · kept here in the journal.</p>}
+  </div>
+</article>

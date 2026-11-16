@@ -1,0 +1,132 @@
+---
+interface Props {
+  filterName: 'tag' | 'category' | 'type';
+  filterLabel: string;
+  options: { key: string; label: string }[];
+  allLabel: string;
+  itemLabel: string;
+  pluralLabel: string;
+  search?: boolean;
+}
+const { filterName, filterLabel, options, allLabel, itemLabel, pluralLabel, search = false } = Astro.props;
+---
+<editorial-archive data-filter-name={filterName} data-item-label={itemLabel} data-plural-label={pluralLabel}>
+  <form class="archive-filters" data-archive-controls hidden>
+    {search && (
+      <div class="archive-search">
+        <label for="dispatch-search" class="eyebrow">Search the dispatches</label>
+        <input id="dispatch-search" type="search" name="q" maxlength="160" />
+      </div>
+    )}
+    {options.length > 0 && (
+      <fieldset class="archive-topics">
+        <legend class="eyebrow">{filterLabel}</legend>
+        <div class="archive-pills">
+          <button class="filter-pill" type="button" data-filter="" aria-pressed="true">{allLabel}</button>
+          {options.map(({ key, label }) => (
+            <button class="filter-pill" type="button" data-filter={key} aria-pressed="false">{label}</button>
+          ))}
+        </div>
+      </fieldset>
+    )}
+    <div class="archive-filter-status">
+      <p role="status" class="edition-meta" data-filter-count></p>
+      <button class="text-link" type="button" data-filter-clear hidden>Clear filters</button>
+    </div>
+  </form>
+  <slot />
+  <p class="archive-no-matches" data-filter-empty hidden>No matches. Try another filter or clear your selection.</p>
+</editorial-archive>
+<script>
+  import { matchesArchiveItem, searchableText } from '../lib/reading';
+
+  class EditorialArchive extends HTMLElement {
+    #listeners?: AbortController;
+
+    connectedCallback() {
+      if (this.#listeners) return;
+
+      const form = this.querySelector<HTMLFormElement>('[data-archive-controls]');
+      const input = form?.querySelector<HTMLInputElement>('input[name="q"]');
+      const clear = form?.querySelector<HTMLButtonElement>('[data-filter-clear]');
+      const count = form?.querySelector('[data-filter-count]');
+      const empty = this.querySelector<HTMLElement>('[data-filter-empty]');
+      const filterName = this.dataset.filterName;
+      if (!form || !clear || !count || !empty || !filterName) return;
+
+      const buttons = [...form.querySelectorAll<HTMLButtonElement>('[data-filter]')];
+      const cards = [...this.querySelectorAll<HTMLElement>('[data-archive-item]')].map((element) => ({
+        element,
+        searchText: element.dataset.search ?? '',
+        filters: JSON.parse(element.dataset.filters ?? '[]') as string[],
+      }));
+      const keys = new Set(buttons.map((button) => button.dataset.filter));
+      let selected = '';
+      const render = () => {
+        const query = searchableText(input?.value ?? '');
+        let visible = 0;
+        for (const { element, searchText, filters } of cards) {
+          const matches = matchesArchiveItem(searchText, filters, query, selected);
+          element.hidden = !matches;
+          if (matches) visible++;
+        }
+        for (const button of buttons) {
+          button.setAttribute('aria-pressed', String(button.dataset.filter === selected));
+        }
+        const label = visible === 1 ? this.dataset.itemLabel : this.dataset.pluralLabel;
+        const message = `${visible} ${label}`;
+        if (count.textContent !== message) count.textContent = message;
+        empty.hidden = visible !== 0;
+        clear.hidden = !query && !selected;
+      };
+
+      const readUrl = () => {
+        const params = new URLSearchParams(location.search);
+        const key = params.get(filterName) ?? '';
+        selected = keys.has(key) ? key : '';
+        if (input) input.value = (params.get('q') ?? '').slice(0, input.maxLength);
+        render();
+      };
+      const updateUrl = () => {
+        const url = new URL(location.href);
+        if (selected) url.searchParams.set(filterName, selected);
+        else url.searchParams.delete(filterName);
+        if (input) {
+          if (input.value.trim()) url.searchParams.set('q', input.value.trim());
+          else url.searchParams.delete('q');
+        }
+        if (url.href !== location.href) history.replaceState(history.state, '', url);
+        render();
+      };
+
+      this.#listeners = new AbortController();
+      const options = { signal: this.#listeners.signal };
+      form.addEventListener('submit', (event) => event.preventDefault(), options);
+      input?.addEventListener('input', updateUrl, options);
+      for (const button of buttons) {
+        button.addEventListener('click', () => {
+          selected = button.dataset.filter === selected ? '' : (button.dataset.filter ?? '');
+          updateUrl();
+        }, options);
+      }
+      clear.addEventListener('click', () => {
+        selected = '';
+        if (input) input.value = '';
+        (input ?? buttons[0])?.focus();
+        updateUrl();
+      }, options);
+      window.addEventListener('popstate', readUrl, options);
+      // The element can be connected during Astro's swap, before the URL changes.
+      document.addEventListener('astro:page-load', readUrl, options);
+      readUrl();
+      form.hidden = false;
+    }
+
+    disconnectedCallback() {
+      this.#listeners?.abort();
+      this.#listeners = undefined;
+    }
+  }
+
+  if (!customElements.get('editorial-archive')) customElements.define('editorial-archive', EditorialArchive);
+</script>

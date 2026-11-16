@@ -1,0 +1,52 @@
+---
+import EditorialLayout from '../../layouts/EditorialLayout.astro';
+import ArchiveFilter from '../../components/ArchiveFilter.astro';
+import DispatchCard from '../../components/DispatchCard.astro';
+import EmptyState from '../../components/EmptyState.astro';
+import { editorialContent } from '../../lib/content';
+import { plainExcerpt } from '../../lib/content-policy';
+import { dispatchNumberLabel, searchableText, tagKey } from '../../lib/reading';
+
+const { dispatches, includesDrafts } = await editorialContent();
+const tags = new Map<string, string>();
+for (const { data } of dispatches) {
+  for (const tag of data.tags) {
+    const key = tagKey(tag);
+    if (!tags.has(key)) tags.set(key, tag);
+  }
+}
+const options = [...tags].sort(([, a], [, b]) => a.localeCompare(b, 'en'))
+  .map(([key, label]) => ({ key, label }));
+---
+<EditorialLayout title="The Evening Dispatches — Yushay Aizaz" description="The archive of Yushay Aizaz’s evening field notes, photographs and encounters." draftPreview={includesDrafts}>
+  <div class="page-width archive-page">
+    <header class="archive-intro">
+      <p class="eyebrow">Field notes · Newest first</p>
+      <h1>The Evening Dispatches</h1>
+      <p>Encounters, observations, and the stories between them.</p>
+    </header>
+    <section aria-labelledby="dispatch-archive-title">
+      <h2 id="dispatch-archive-title" class="sr-only">Dispatch archive</h2>
+      {dispatches.length ? (
+        <ArchiveFilter filterName="tag" filterLabel="Filter by topic" allLabel="All topics" itemLabel="dispatch" pluralLabel="dispatches" options={options} search>
+          <div class="dispatch-grid archive-results">
+            {dispatches.map((entry) => {
+              const { data, body } = entry;
+              const haystack = searchableText([
+                dispatchNumberLabel(data.dispatchNumber), data.dispatchNumber, data.title, data.location,
+                data.captionExcerpt, ...data.tags, plainExcerpt(body, body?.length ?? 0),
+              ].join(' '));
+              return (
+                <div data-archive-item data-search={haystack} data-filters={JSON.stringify(data.tags.map(tagKey))}>
+                  <DispatchCard entry={entry} />
+                </div>
+              );
+            })}
+          </div>
+        </ArchiveFilter>
+      ) : (
+        <EmptyState eyebrow="The archive" title="No dispatches yet" text="Field notes will appear here as they are published." compact />
+      )}
+    </section>
+  </div>
+</EditorialLayout>

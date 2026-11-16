@@ -1,0 +1,36 @@
+---
+import EditorialLayout from '../../layouts/EditorialLayout.astro';
+import ArchiveFilter from '../../components/ArchiveFilter.astro';
+import WorkCard from '../../components/WorkCard.astro';
+import EmptyState from '../../components/EmptyState.astro';
+import { editorialContent } from '../../lib/content';
+import { workCategories } from '../../lib/reading';
+
+const { works, includesDrafts } = await editorialContent();
+const options = Object.entries(workCategories).map(([key, label]) => ({ key, label }));
+---
+<EditorialLayout title="Original Works — Yushay Aizaz" description="Original essays, poetry, short stories and reflections by Yushay Aizaz." draftPreview={includesDrafts}>
+  <div class="page-width archive-page">
+    <header class="archive-intro">
+      <p class="eyebrow">From the writing desk</p>
+      <h1>Original Works</h1>
+      <p>Essays, poems, short stories and reflections.</p>
+    </header>
+    <section aria-labelledby="works-archive-title">
+      <h2 id="works-archive-title" class="sr-only">Works archive</h2>
+      {works.length ? (
+        <ArchiveFilter filterName="category" filterLabel="Filter by category" allLabel="All works" itemLabel="work" pluralLabel="works" options={options}>
+          <div class="journal-grid archive-results">
+            {works.map((entry) => (
+              <div data-archive-item data-filters={JSON.stringify([entry.data.category])}>
+                <WorkCard entry={entry} />
+              </div>
+            ))}
+          </div>
+        </ArchiveFilter>
+      ) : (
+        <EmptyState eyebrow="The archive" title="No original works yet" text="New writing will appear here as it is published." compact />
+      )}
+    </section>
+  </div>
+</EditorialLayout>

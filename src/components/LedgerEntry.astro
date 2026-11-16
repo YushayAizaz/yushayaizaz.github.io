@@ -1,0 +1,42 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import Arrow from './Arrow.astro';
+import { formatDate } from '../lib/content-policy';
+import { archiveEventType, eventTypes } from '../lib/events';
+
+interface Props { entry: CollectionEntry<'events'>; upcoming?: boolean; }
+const { entry, upcoming = false } = Astro.props;
+const { data } = entry;
+const Content = entry.body?.trim() ? (await render(entry)).Content : undefined;
+const status = upcoming ? 'Upcoming' : eventTypes[archiveEventType(data.type)];
+const externalLabel = data.type === 'publication' ? 'Publication details' : upcoming ? 'Gathering details' : 'More details';
+---
+<article class="ledger-record" data-event-id={entry.id}>
+  <div class="ledger-record-date">
+    <time class="edition-meta" datetime={data.date.toISOString()}>{formatDate(data.date)}</time>
+    <div class="ledger-record-badges">
+      <span class:list={['event-status', { 'event-status-upcoming': upcoming }]}>{status}</span>
+      {data.draft && <span class="draft-badge">Draft</span>}
+    </div>
+  </div>
+  <div class="ledger-record-content">
+    <h3>{data.title}</h3>
+    {(data.location || data.organization) && (
+      <p class="card-meta ledger-record-meta">
+        {data.location && <span>{data.location}</span>}
+        {data.location && data.organization && <span aria-hidden="true">·</span>}
+        {data.organization && <span>{data.organization}</span>}
+      </p>
+    )}
+    <p class="ledger-record-description">{data.description}</p>
+    {Content && <div class="literary-prose ledger-record-notes"><Content /></div>}
+    {data.photos.length > 0 && (
+      <ul class="ledger-photos" aria-label="Event photographs">
+        {data.photos.map((src, index) => (
+          <li><img src={src} alt={data.photoAlts[index] ?? ''} loading="lazy" decoding="async" /></li>
+        ))}
+      </ul>
+    )}
+    {data.externalUrl && <a class="text-link" href={data.externalUrl}>{externalLabel} <Arrow /></a>}
+  </div>
+</article>

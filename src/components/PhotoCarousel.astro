@@ -1,0 +1,102 @@
+---
+interface Props { images: string[]; alts: string[]; }
+const { images, alts } = Astro.props;
+---
+<editorial-plates class="plate-gallery" role="region" aria-label="Dispatch photographs">
+  <div class="plate-stage" data-plate-stage>
+    {images.map((src, index) => (
+      <figure data-plate class="plate">
+        <img src={src} alt={alts[index] ?? ''} loading={index === 0 ? 'eager' : 'lazy'} decoding="async" fetchpriority={index === 0 ? 'high' : 'auto'} />
+        <figcaption class="edition-meta">Plate {index + 1} of {images.length}</figcaption>
+      </figure>
+    ))}
+  </div>
+  {images.length > 1 && (
+    <div class="plate-controls" data-plate-controls hidden>
+      <div class="plate-navigation">
+        <button type="button" data-plate-previous aria-label="Previous plate">
+          <span aria-hidden="true">←</span>
+        </button>
+        <p class="edition-meta" data-plate-counter role="status">Plate 1 of {images.length}</p>
+        <button type="button" data-plate-next aria-label="Next plate">
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>
+      <div class="plate-thumbnails" role="group" aria-label="Choose a plate">
+        {images.map((src, index) => (
+          <button type="button" data-plate-thumb aria-label={`Show plate ${index + 1}`} aria-pressed={index === 0 ? 'true' : 'false'}>
+            <img src={src} alt="" width="52" height="52" loading="lazy" decoding="async" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+</editorial-plates>
+<script>
+  import { nextPlate } from '../lib/reading';
+
+  class EditorialPlates extends HTMLElement {
+    #listeners?: AbortController;
+
+    connectedCallback() {
+      if (this.#listeners) return;
+      const controls = this.querySelector<HTMLElement>('[data-plate-controls]');
+      const stage = this.querySelector<HTMLElement>('[data-plate-stage]');
+      const counter = this.querySelector('[data-plate-counter]');
+      const previous = this.querySelector<HTMLButtonElement>('[data-plate-previous]');
+      const next = this.querySelector<HTMLButtonElement>('[data-plate-next]');
+      const plates = [...this.querySelectorAll<HTMLElement>('[data-plate]')];
+      const thumbs = [...this.querySelectorAll<HTMLButtonElement>('[data-plate-thumb]')];
+      if (!controls || !stage || !counter || !previous || !next || plates.length < 2) return;
+
+      let current = 0;
+      const show = (index: number) => {
+        current = index;
+        plates.forEach((plate, i) => { plate.hidden = i !== current; });
+        thumbs.forEach((thumb, i) => thumb.setAttribute('aria-pressed', String(i === current)));
+        const message = `Plate ${current + 1} of ${plates.length}`;
+        if (counter.textContent !== message) counter.textContent = message;
+
+        const active = thumbs[current];
+        const strip = active?.parentElement;
+        if (active && strip) {
+          const button = active.getBoundingClientRect();
+          const viewport = strip.getBoundingClientRect();
+          if (button.left < viewport.left) strip.scrollLeft -= viewport.left - button.left;
+          else if (button.right > viewport.right) strip.scrollLeft += button.right - viewport.right;
+        }
+      };
+
+      this.#listeners = new AbortController();
+      const options = { signal: this.#listeners.signal };
+      previous.addEventListener('click', () => show((current - 1 + plates.length) % plates.length), options);
+      next.addEventListener('click', () => show((current + 1) % plates.length), options);
+      thumbs.forEach((thumb, index) => thumb.addEventListener('click', () => show(index), options));
+      this.addEventListener('keydown', (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        const index = nextPlate(current, event.key, plates.length);
+        if (index === undefined) return;
+        event.preventDefault();
+        show(index);
+        if (event.target instanceof HTMLButtonElement && thumbs.includes(event.target)) {
+          thumbs[index]?.focus({ preventScroll: true });
+        }
+      }, options);
+
+      this.setAttribute('aria-roledescription', 'carousel');
+      stage.tabIndex = 0;
+      stage.setAttribute('role', 'group');
+      stage.setAttribute('aria-label', 'Photo plates. Use the left and right arrow keys to change plates.');
+      controls.hidden = false;
+      this.dataset.enhanced = '';
+      show(0);
+    }
+
+    disconnectedCallback() {
+      this.#listeners?.abort();
+      this.#listeners = undefined;
+    }
+  }
+
+  if (!customElements.get('editorial-plates')) customElements.define('editorial-plates', EditorialPlates);
+</script>

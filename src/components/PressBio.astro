@@ -1,0 +1,37 @@
+---
+interface Props { id: string; label: string; text: string; }
+const { id, label, text } = Astro.props;
+const bioId = `press-bio-${id}`;
+---
+<editorial-press-bio class="press-bio">
+  <div class="press-bio-heading">
+    <h3 id={`${bioId}-label`}>{label}</h3>
+    <button type="button" class="text-link" data-copy-bio aria-label={`Copy ${label.toLowerCase()}`} aria-controls={bioId} hidden>Copy bio</button>
+  </div>
+  <p id={bioId} data-bio-text>{text}</p>
+  <p class="press-bio-status" data-copy-status role="status"></p>
+</editorial-press-bio>
+<script>
+  import { bindBioCopy } from '../scripts/copy-bio';
+
+  class EditorialPressBio extends HTMLElement {
+    #cleanup?: () => void;
+
+    connectedCallback() {
+      if (this.#cleanup) return;
+      const button = this.querySelector<HTMLButtonElement>('[data-copy-bio]');
+      const bio = this.querySelector<HTMLElement>('[data-bio-text]');
+      const status = this.querySelector<HTMLElement>('[data-copy-status]');
+      if (button && bio && status) this.#cleanup = bindBioCopy(button, bio, status, navigator.clipboard);
+    }
+
+    disconnectedCallback() {
+      this.#cleanup?.();
+      this.#cleanup = undefined;
+    }
+  }
+
+  if (!customElements.get('editorial-press-bio')) {
+    customElements.define('editorial-press-bio', EditorialPressBio);
+  }
+</script>

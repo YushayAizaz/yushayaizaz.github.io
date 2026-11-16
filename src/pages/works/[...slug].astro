@@ -1,0 +1,43 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import EditorialLayout from '../../layouts/EditorialLayout.astro';
+import { editorialContent } from '../../lib/content';
+import { formatDate, plainExcerpt } from '../../lib/content-policy';
+import { workCategories } from '../../lib/reading';
+
+export async function getStaticPaths() {
+  const { works, includesDrafts } = await editorialContent();
+  return works.map((entry) => ({ params: { slug: entry.id }, props: { entry, includesDrafts } }));
+}
+
+interface Props { entry: CollectionEntry<'works'>; includesDrafts: boolean; }
+const { entry, includesDrafts } = Astro.props;
+const { data, body } = entry;
+const { Content } = await render(entry);
+const isPoetry = data.category === 'poetry';
+---
+<EditorialLayout title={`${data.title} — Yushay Aizaz`} description={data.subtitle || plainExcerpt(body, 155) || undefined} draftPreview={includesDrafts}>
+  <div class="page-width reader-page">
+    <a class="reader-return" href="/works/"><span aria-hidden="true">←</span> Original Works</a>
+
+    <article class="reader-article essay-reader" data-reader={isPoetry ? 'poetry' : 'prose'}>
+      <header class="reader-header">
+        <div class="reader-overline">
+          <a class="eyebrow" href={`/works/?category=${data.category}`}>{workCategories[data.category]}</a>
+          {data.draft && <span class="draft-badge">Draft</span>}
+        </div>
+        <h1>{data.title}</h1>
+        {data.subtitle && <p class="reader-deck">{data.subtitle}</p>}
+        <div class="card-meta reader-meta">
+          <time datetime={data.date.toISOString()}>{formatDate(data.date)}</time>
+          <span aria-hidden="true">·</span><span>{data.readingTime} min read</span>
+        </div>
+      </header>
+
+      {data.coverImage && (
+        <figure class="reader-cover"><img src={data.coverImage} alt={data.coverAlt ?? ''} decoding="async" /></figure>
+      )}
+      <div class:list={['literary-prose', isPoetry ? 'poetry' : 'drop-cap']}><Content /></div>
+    </article>
+  </div>
+</EditorialLayout>

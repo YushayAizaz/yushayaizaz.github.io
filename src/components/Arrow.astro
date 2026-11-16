@@ -1,0 +1,5 @@
+---
+interface Props { direction?: 'up-right' | 'down-right' | 'up'; }
+const rotation = { 'up-right': 0, 'down-right': 90, up: -45 }[Astro.props.direction ?? 'up-right'];
+---
+<svg class="editorial-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12" transform={`rotate(${rotation} 12 12)`} /></svg>
